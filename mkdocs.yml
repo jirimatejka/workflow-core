@@ -4,6 +4,7 @@ nav:
     - Getting started: getting-started.md
     - External events: external-events.md
     - Activity workers: activities.md
+    - Nested workflows: nested-workflows.md
     - Error handling: error-handling.md
     - Control structures: control-structures.md
     - Saga transactions: sagas.md

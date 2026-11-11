@@ -183,5 +183,25 @@ namespace WorkflowCore.Interface
     /// <returns></returns>
     IStepBuilder<TData, Activity> Activity(Expression<Func<TData, IStepExecutionContext, string>> activityName, Expression<Func<TData, object>> parameters = null,
         Expression<Func<TData, DateTime>> effectiveDate = null, Expression<Func<TData, bool>> cancelCondition = null);
+
+    /// <summary>
+    /// Start a nested workflow and wait here until it ends
+    /// </summary>
+    /// <param name="workflowId">The id of the child workflow definition</param>
+    /// <param name="data">The data to pass to the child workflow (must be an instance of its data type)</param>
+    /// <param name="cancelCondition">A condition that when true will cancel this step and terminate the child</param>
+    /// <returns></returns>
+    IStepBuilder<TData, RunWorkflow> RunWorkflow(string workflowId, Expression<Func<TData, object>> data = null,
+        Expression<Func<TData, bool>> cancelCondition = null);
+
+    /// <summary>
+    /// Start a nested workflow and wait here until it ends
+    /// </summary>
+    /// <param name="workflowId">An expression resolving the id of the child workflow definition</param>
+    /// <param name="data">The data to pass to the child workflow (must be an instance of its data type)</param>
+    /// <param name="cancelCondition">A condition that when true will cancel this step and terminate the child</param>
+    /// <returns></returns>
+    IStepBuilder<TData, RunWorkflow> RunWorkflow(Expression<Func<TData, IStepExecutionContext, string>> workflowId, Expression<Func<TData, object>> data = null,
+        Expression<Func<TData, bool>> cancelCondition = null);
     }
 }

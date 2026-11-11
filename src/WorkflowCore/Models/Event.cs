@@ -17,5 +17,7 @@ namespace WorkflowCore.Models
         public bool IsProcessed { get; set; }
         
         public const string EventTypeActivity = "WorkflowCore.Activity";
+
+        public const string EventTypeWorkflowCompleted = "WorkflowCore.WorkflowCompleted";
     }
 }

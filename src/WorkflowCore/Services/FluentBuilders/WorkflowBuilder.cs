@@ -301,6 +301,16 @@ namespace WorkflowCore.Services
             return Start().Activity(activityName, parameters, effectiveDate, cancelCondition);
         }
 
+        public IStepBuilder<TData, RunWorkflow> RunWorkflow(string workflowId, Expression<Func<TData, object>> data = null, Expression<Func<TData, bool>> cancelCondition = null)
+        {
+            return Start().RunWorkflow(workflowId, data, cancelCondition);
+        }
+
+        public IStepBuilder<TData, RunWorkflow> RunWorkflow(Expression<Func<TData, IStepExecutionContext, string>> workflowId, Expression<Func<TData, object>> data = null, Expression<Func<TData, bool>> cancelCondition = null)
+        {
+            return Start().RunWorkflow(workflowId, data, cancelCondition);
+        }
+
         private IStepBuilder<TData, InlineStepBody> Start()
         {
             return StartWith(_ => ExecutionResult.Next());

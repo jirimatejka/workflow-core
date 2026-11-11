@@ -588,5 +588,37 @@ namespace WorkflowCore.Services
             Step.Outcomes.Add(new ValueOutcome { NextStep = newStep.Id });
             return stepBuilder;
         }
+
+        public IStepBuilder<TData, RunWorkflow> RunWorkflow(string workflowId, Expression<Func<TData, object>> data = null, Expression<Func<TData, bool>> cancelCondition = null)
+        {
+            var newStep = new WorkflowStep<RunWorkflow>();
+            newStep.CancelCondition = cancelCondition;
+
+            WorkflowBuilder.AddStep(newStep);
+            var stepBuilder = new StepBuilder<TData, RunWorkflow>(WorkflowBuilder, newStep);
+            stepBuilder.Input((step) => step.WorkflowId, (d) => workflowId);
+
+            if (data != null)
+                stepBuilder.Input((step) => step.Data, data);
+
+            Step.Outcomes.Add(new ValueOutcome { NextStep = newStep.Id });
+            return stepBuilder;
+        }
+
+        public IStepBuilder<TData, RunWorkflow> RunWorkflow(Expression<Func<TData, IStepExecutionContext, string>> workflowId, Expression<Func<TData, object>> data = null, Expression<Func<TData, bool>> cancelCondition = null)
+        {
+            var newStep = new WorkflowStep<RunWorkflow>();
+            newStep.CancelCondition = cancelCondition;
+
+            WorkflowBuilder.AddStep(newStep);
+            var stepBuilder = new StepBuilder<TData, RunWorkflow>(WorkflowBuilder, newStep);
+            stepBuilder.Input((step) => step.WorkflowId, workflowId);
+
+            if (data != null)
+                stepBuilder.Input((step) => step.Data, data);
+
+            Step.Outcomes.Add(new ValueOutcome { NextStep = newStep.Id });
+            return stepBuilder;
+        }
     }
 }
