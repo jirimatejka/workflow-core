@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Threading;
@@ -22,16 +23,20 @@ namespace WorkflowCore.Services.BackgroundTasks
         private readonly IPersistenceProvider _persistenceStore;
         private readonly IWorkflowExecutor _executor;
         private readonly IGreyList _greylist;
+        private readonly IQueueProvider _queueProvider;
+        private readonly IWorkflowController _controller;
         private readonly ConcurrentDictionary<string, int> _loadFailures = new ConcurrentDictionary<string, int>();
 
         protected override int MaxConcurrentItems => Options.MaxConcurrentWorkflows;
         protected override QueueType Queue => QueueType.Workflow;
 
-        public WorkflowConsumer(IPersistenceProvider persistenceProvider, IQueueProvider queueProvider, ILoggerFactory loggerFactory, IServiceProvider serviceProvider, IWorkflowRegistry registry, IDistributedLockProvider lockProvider, IWorkflowExecutor executor, IDateTimeProvider datetimeProvider, IGreyList greylist, WorkflowOptions options)
+        public WorkflowConsumer(IPersistenceProvider persistenceProvider, IQueueProvider queueProvider, ILoggerFactory loggerFactory, IServiceProvider serviceProvider, IWorkflowRegistry registry, IDistributedLockProvider lockProvider, IWorkflowExecutor executor, IDateTimeProvider datetimeProvider, IGreyList greylist, WorkflowOptions options, IWorkflowController controller = null)
             : base(queueProvider, loggerFactory, options)
         {
             _persistenceStore = persistenceProvider;
             _greylist = greylist;
+            _queueProvider = queueProvider;
+            _controller = controller;
             _executor = executor;
             _lockProvider = lockProvider;
             _datetimeProvider = datetimeProvider;
@@ -54,6 +59,8 @@ namespace WorkflowCore.Services.BackgroundTasks
 
             WorkflowInstance workflow = null;
             WorkflowExecutorResult result = null;
+            var previousStatus = WorkflowStatus.Runnable;
+            HashSet<string> openPointers = null;
 
             try
             {
@@ -63,6 +70,8 @@ namespace WorkflowCore.Services.BackgroundTasks
                 WorkflowActivity.Enrich(workflow, "process");
                 if (workflow.Status == WorkflowStatus.Runnable)
                 {
+                    previousStatus = workflow.Status;
+                    openPointers = new HashSet<string>(workflow.ExecutionPointers.Where(p => p.EndTime == null).Select(p => p.Id));
                     try
                     {
                         result = await _executor.Execute(workflow, cancellationToken);
@@ -109,6 +118,8 @@ namespace WorkflowCore.Services.BackgroundTasks
 
                     await _persistenceStore.PersistErrors(result.Errors, cancellationToken);
 
+                    await HandleNestedWorkflows(workflow, previousStatus, openPointers, cancellationToken);
+
                     if ((workflow.Status == WorkflowStatus.Runnable) && workflow.NextExecution.HasValue)
                     {
                         var readAheadTicks = _datetimeProvider.UtcNow.Add(Options.PollInterval).Ticks;
@@ -132,6 +143,34 @@ namespace WorkflowCore.Services.BackgroundTasks
                 }
             }
 
+        }
+
+        private async Task HandleNestedWorkflows(WorkflowInstance workflow, WorkflowStatus previousStatus, HashSet<string> openPointers, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var ended = workflow.Status == WorkflowStatus.Complete || workflow.Status == WorkflowStatus.Terminated;
+                if (previousStatus == WorkflowStatus.Runnable && ended)
+                {
+                    await NestedWorkflowHelper.PublishCompletion(_persistenceStore, _queueProvider, _datetimeProvider, workflow);
+                }
+
+                if (_controller == null || openPointers == null)
+                    return;
+
+                var toTerminate = workflow.ExecutionPointers
+                    .Where(p => openPointers.Contains(p.Id))
+                    .Where(p => p.EndTime.HasValue ? p.Status != PointerStatus.Complete : ended)
+                    .Select(NestedWorkflowHelper.GetChildId)
+                    .Where(id => id != null)
+                    .ToList();
+
+                await NestedWorkflowHelper.TerminateChildren(_controller, _persistenceStore, Logger, toTerminate);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                Logger.LogError(ex, "Error handling nested workflows of {WorkflowId}", workflow.Id);
+            }
         }
 
         private bool IsQuarantined(string itemId)

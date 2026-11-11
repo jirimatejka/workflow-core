@@ -204,6 +204,7 @@ namespace WorkflowCore.Services
             try
             {
                 var wf = await _persistenceStore.GetWorkflowInstance(workflowId);
+                var wasActive = wf.Status == WorkflowStatus.Runnable || wf.Status == WorkflowStatus.Suspended;
 
                 wf.Status = WorkflowStatus.Terminated;
                 wf.CompleteTime = _dateTimeProvider.UtcNow;
@@ -218,6 +219,13 @@ namespace WorkflowCore.Services
                     WorkflowDefinitionId = wf.WorkflowDefinitionId,
                     Version = wf.Version
                 });
+
+                if (wasActive)
+                {
+                    await NestedWorkflowHelper.PublishCompletion(_persistenceStore, _queueProvider, _dateTimeProvider, wf);
+                    await NestedWorkflowHelper.TerminateChildren(this, _persistenceStore, _logger, NestedWorkflowHelper.GetActiveChildIds(wf));
+                }
+
                 return true;
             }
             finally
